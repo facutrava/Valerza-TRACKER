@@ -24,8 +24,12 @@ export function StatCard({ eyebrow, value, sub, accent = 'brand', icon }: StatCa
       />
       <div className="relative flex items-start justify-between gap-3">
         <div>
-          <div className="text-[11px] font-semibold uppercase tracking-wider text-ink-400">{eyebrow}</div>
-          <div className="tabular mt-1.5 text-2xl font-bold text-ink-900 dark:text-ink-50">{value}</div>
+          <div className="flex min-h-[2.5em] items-end text-[11px] font-semibold uppercase leading-tight tracking-wider text-ink-400">
+            {eyebrow}
+          </div>
+          <div className="tabular mt-1.5 whitespace-nowrap text-[1.375rem] font-bold tracking-tight text-ink-900 dark:text-ink-50">
+            {value}
+          </div>
           {sub && <div className="mt-1 text-xs text-ink-400">{sub}</div>}
         </div>
         {icon && <div className="text-brand-600 dark:text-brand-400">{icon}</div>}
