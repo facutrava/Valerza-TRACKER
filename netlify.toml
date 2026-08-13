@@ -1,0 +1,10 @@
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+# La app usa HashRouter, así que no hace falta redirect de SPA,
+# pero lo dejamos como red de seguridad si en el futuro se cambia a BrowserRouter.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
