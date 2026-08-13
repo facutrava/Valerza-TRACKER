@@ -230,15 +230,17 @@ export function Dashboard() {
         </div>
       )}
 
+      {/* Capital acumulado */}
+      <StatCard
+        eyebrow="Capital acumulado (USD)"
+        value={formatUSD(totalUSDGlobal)}
+        accent="brand"
+        icon={<Wallet size={28} />}
+        size="hero"
+      />
+
       {/* KPIs principales */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard
-          eyebrow="Capital acumulado (USD)"
-          value={formatUSD(totalUSDGlobal)}
-          sub="Todos los bloques, todo el histórico"
-          accent="brand"
-          icon={<Wallet size={20} />}
-        />
         <StatCard
           eyebrow={`ON · facturación ${anio} (ARS)`}
           value={formatARS(onAcumulado.logradoArs)}
@@ -258,6 +260,13 @@ export function Dashboard() {
           value={formatUSD(amerianAcumulado.logradoUsd)}
           sub={amerianAcumulado.usd !== null ? `${formatPct(amerianAcumulado.usd)} del objetivo (${formatUSD(amerianAcumulado.objetivoUsd)})` : `Objetivo: ${formatUSD(amerianAcumulado.objetivoUsd)}`}
           accent="ink"
+          icon={<TrendingUp size={20} />}
+        />
+        <StatCard
+          eyebrow={`Martín Bronce · facturación ${anio}`}
+          value={formatUSD(mbAcumulado.logradoUsd)}
+          sub={mbAcumulado.usd !== null ? `${formatPct(mbAcumulado.usd)} del objetivo (${formatUSD(mbAcumulado.objetivoUsd)})` : `Objetivo: ${formatUSD(mbAcumulado.objetivoUsd)}`}
+          accent="gold"
           icon={<TrendingUp size={20} />}
         />
       </div>
