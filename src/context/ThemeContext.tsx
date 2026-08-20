@@ -11,7 +11,7 @@ const ThemeContext = createContext<ThemeContextValue | undefined>(undefined)
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setTheme] = useState<Theme>(() => {
-    const stored = localStorage.getItem('valerza-theme')
+    const stored = localStorage.getItem('sales-tracker-theme')
     if (stored === 'light' || stored === 'dark') return stored
     return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
   })
@@ -20,7 +20,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     const root = document.documentElement
     if (theme === 'dark') root.classList.add('dark')
     else root.classList.remove('dark')
-    localStorage.setItem('valerza-theme', theme)
+    localStorage.setItem('sales-tracker-theme', theme)
   }, [theme])
 
   const toggleTheme = () => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))

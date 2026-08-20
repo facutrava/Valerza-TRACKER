@@ -1,12 +1,15 @@
 import { useState } from 'react'
 import { useData } from '../context/DataContext'
+import { useToast } from '../context/ToastContext'
 import { Field, Input, PrimaryButton, Select } from '../components/Form'
+import { SkeletonTableRows } from '../components/Skeleton'
 import { mesNombre } from '../utils/format'
 
 const currentYear = new Date().getFullYear()
 
 export function Cotizaciones() {
   const { cotizaciones, upsertCotizacion, loading } = useData()
+  const toast = useToast()
   const [anio, setAnio] = useState(currentYear)
   const [mes, setMes] = useState(new Date().getMonth() + 1)
   const [valor, setValor] = useState('')
@@ -18,6 +21,9 @@ export function Cotizaciones() {
     try {
       await upsertCotizacion({ anio, mes, valor_mep: Number(valor) })
       setValor('')
+      toast.success('Cotización guardada')
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'No se pudo guardar la cotización')
     } finally {
       setSaving(false)
     }
@@ -83,13 +89,7 @@ export function Cotizaciones() {
             </tr>
           </thead>
           <tbody>
-            {loading && (
-              <tr>
-                <td colSpan={3} className="px-5 py-8 text-center text-ink-400">
-                  Cargando…
-                </td>
-              </tr>
-            )}
+            {loading && <SkeletonTableRows cols={3} rows={4} />}
             {!loading && ordenadas.length === 0 && (
               <tr>
                 <td colSpan={3} className="px-5 py-8 text-center text-ink-400">

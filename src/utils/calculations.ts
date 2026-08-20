@@ -245,4 +245,13 @@ export function resumenRango(
   }
 }
 
+/** Fracción del año ya transcurrida (0-1). Si `anio` no es el año actual, devuelve 1 (año completo). */
+export function fraccionAnioTranscurrida(anio: number): number {
+  const hoy = new Date()
+  if (anio !== hoy.getFullYear()) return 1
+  const inicioAnio = new Date(anio, 0, 1).getTime()
+  const finAnio = new Date(anio + 1, 0, 1).getTime()
+  return Math.max((hoy.getTime() - inicioAnio) / (finAnio - inicioAnio), 1 / 365)
+}
+
 export { monthKey, quarterKey, yearKey }

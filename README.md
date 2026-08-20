@@ -1,14 +1,14 @@
-# Valerza · Seguimiento de Resultados
+# Sales Tracker · Seguimiento de Resultados
 
-App personal para registrar tus aportes de clientes por bloque (ON, Amerian, Martín
-Bronce), medir cumplimiento de objetivos y exportar reportes en PDF con la identidad
-de Valerza.
+App multi-usuario para registrar aportes de clientes por bloque (ON, Amerian, Martín
+Bronce), medir cumplimiento de objetivos y exportar reportes en PDF. Cada persona
+inicia sesión con su cuenta de Google y ve únicamente sus propios datos.
 
 ## Stack
 
 - React + TypeScript + Vite
 - Tailwind CSS (tokens de marca en `tailwind.config.js`)
-- Supabase (Postgres) como base de datos
+- Supabase (Postgres + Auth con Google) como base de datos y login
 - Recharts para los gráficos del panel
 - jsPDF + jspdf-autotable para el export a PDF
 - Deploy en Netlify
@@ -20,6 +20,10 @@ de Valerza.
    - `supabase/schema.sql` — crea todas las tablas.
    - `supabase/seed.sql` — carga los 3 bloques, los objetivos 2026 y el histórico
      Enero-Julio migrado desde tu planilla de Excel.
+   - `supabase/migration_auth.sql` — habilita login multi-usuario (cada cuenta de
+     Google ve solo sus propios datos). Seguir los pasos numerados dentro del
+     archivo, en orden — incluye configurar el proveedor Google en
+     **Authentication > Providers** con un OAuth Client ID/Secret de Google Cloud.
 3. Andá a **Project Settings > API** y copiá:
    - `Project URL`
    - `anon public key`
@@ -67,9 +71,11 @@ src/
   utils/format.ts          formateo de moneda, porcentajes y períodos
   utils/pdf.ts             generación del PDF de reportes
   context/DataContext.tsx  fetch + CRUD contra Supabase
+  context/AuthContext.tsx  sesión y login/logout con Google
   context/ThemeContext.tsx modo claro/oscuro
   components/              UI reutilizable (Sidebar, StatCard, formularios, etc.)
   pages/
+    Login.tsx               pantalla de login con Google
     Dashboard.tsx           panel principal
     Aportes.tsx             alta/edición/borrado de aportes por cliente
     Objetivos.tsx           carga de objetivos por bloque y período
@@ -78,6 +84,7 @@ src/
 supabase/
   schema.sql                esquema de base de datos
   seed.sql                  datos iniciales (bloques, objetivos, histórico)
+  migration_auth.sql        migración a multi-usuario (user_id, RLS, alta con Google)
 ```
 
 ## Reglas de negocio clave (para tener en cuenta si lo modificás)
@@ -93,7 +100,7 @@ supabase/
   `cotizaciones_mensuales`), no la cotización de la operación puntual.
 - El objetivo se mide solo por capital que **entra**; los retiros no se registran ni
   descuentan.
-- "Cliente nuevo" = nuevo para Valerza (no para tu cartera personal).
+- "Cliente nuevo" = nuevo para vos (no un cliente existente de tu cartera).
 - El histórico Enero-Julio 2026 no tiene detalle de cliente — vive en
   `historico_migrado` y se suma a los totales por período, pero no aparece en el
   listado de **Aportes**. Si en algún momento conseguís el desglose por cliente de

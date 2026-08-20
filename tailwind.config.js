@@ -5,7 +5,7 @@ export default {
   theme: {
     extend: {
       colors: {
-        // Rojo de marca Valerza, extraído del PDF institucional
+        // Rojo de marca Sales Tracker
         brand: {
           50: '#fdf2f3',
           100: '#fce4e6',

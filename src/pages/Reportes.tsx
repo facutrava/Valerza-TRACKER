@@ -66,7 +66,7 @@ export function Reportes() {
     <div className="space-y-8 p-8">
       <div>
         <h1 className="text-2xl font-extrabold tracking-tight text-ink-900 dark:text-ink-50">Reportes</h1>
-        <p className="mt-0.5 text-sm text-ink-400">Generá un PDF con la identidad de Valerza para mostrar resultados</p>
+        <p className="mt-0.5 text-sm text-ink-400">Generá un PDF con la identidad de Sales Tracker para mostrar resultados</p>
       </div>
 
       <div className="rounded-xl border border-ink-100 bg-white p-6 shadow-card dark:border-ink-800 dark:bg-ink-900">

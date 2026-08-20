@@ -89,7 +89,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const upsertCotizacion: DataContextValue['upsertCotizacion'] = async (c) => {
     const { error } = await supabase
       .from('cotizaciones_mensuales')
-      .upsert(c, { onConflict: 'anio,mes' })
+      .upsert(c, { onConflict: 'user_id,anio,mes' })
     if (error) throw error
     await fetchAll()
   }

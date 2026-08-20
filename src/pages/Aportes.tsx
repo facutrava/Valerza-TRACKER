@@ -1,26 +1,101 @@
-import { useMemo, useState } from 'react'
-import { Pencil, Plus, Trash2 } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { AnimatePresence, motion } from 'framer-motion'
+import { ArrowDown, ArrowUp, ArrowUpDown, Download, Pencil, Plus, Trash2 } from 'lucide-react'
 import { useData } from '../context/DataContext'
+import { useToast } from '../context/ToastContext'
+import { useConfirm } from '../context/ConfirmContext'
 import { Modal } from '../components/Modal'
+import { SkeletonTableRows } from '../components/Skeleton'
 import { AporteForm, type AporteFormValues } from '../components/AporteForm'
 import { MonedaBadge } from '../components/MonedaBadge'
-import { PrimaryButton, Select } from '../components/Form'
+import { GhostButton, Input, PrimaryButton, Select } from '../components/Form'
 import { formatMoneda } from '../utils/format'
+import { descargarCSV } from '../utils/csv'
 import type { Aporte } from '../types'
+
+type CampoOrden = 'fecha' | 'cliente_nombre' | 'monto' | 'bloque' | 'tipo_cliente'
+
+const PAGINA = 25
+
+function formatFechaHora(iso: string) {
+  return new Date(iso).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+}
 
 export function Aportes() {
   const { bloques, aportes, crearAporte, actualizarAporte, eliminarAporte, loading } = useData()
+  const toast = useToast()
+  const confirm = useConfirm()
   const [modalOpen, setModalOpen] = useState(false)
   const [editando, setEditando] = useState<Aporte | undefined>(undefined)
   const [saving, setSaving] = useState(false)
   const [filtroBloque, setFiltroBloque] = useState<string>('todos')
-
-  const aportesFiltrados = useMemo(
-    () => (filtroBloque === 'todos' ? aportes : aportes.filter((a) => a.bloque_id === filtroBloque)),
-    [aportes, filtroBloque]
-  )
+  const [filtroTexto, setFiltroTexto] = useState('')
+  const [filtroDesde, setFiltroDesde] = useState('')
+  const [filtroHasta, setFiltroHasta] = useState('')
+  const [orden, setOrden] = useState<{ campo: CampoOrden; dir: 'asc' | 'desc' }>({ campo: 'fecha', dir: 'desc' })
+  const [visibleCount, setVisibleCount] = useState(PAGINA)
 
   const nombreBloque = (id: string) => bloques.find((b) => b.id === id)?.nombre ?? '—'
+
+  const aportesFiltrados = useMemo(() => {
+    const texto = filtroTexto.trim().toLowerCase()
+    return aportes.filter((a) => {
+      if (filtroBloque !== 'todos' && a.bloque_id !== filtroBloque) return false
+      if (texto && !a.cliente_nombre.toLowerCase().includes(texto)) return false
+      if (filtroDesde && a.fecha < filtroDesde) return false
+      if (filtroHasta && a.fecha > filtroHasta) return false
+      return true
+    })
+  }, [aportes, filtroBloque, filtroTexto, filtroDesde, filtroHasta])
+
+  const aportesOrdenados = useMemo(() => {
+    const signo = orden.dir === 'asc' ? 1 : -1
+    return [...aportesFiltrados].sort((a, b) => {
+      if (orden.campo === 'monto') return (a.monto - b.monto) * signo
+      if (orden.campo === 'bloque') return nombreBloque(a.bloque_id).localeCompare(nombreBloque(b.bloque_id)) * signo
+      const va = a[orden.campo]
+      const vb = b[orden.campo]
+      return va < vb ? -signo : va > vb ? signo : 0
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [aportesFiltrados, orden])
+
+  useEffect(() => {
+    setVisibleCount(PAGINA)
+  }, [filtroBloque, filtroTexto, filtroDesde, filtroHasta, orden])
+
+  const aportesPaginados = aportesOrdenados.slice(0, visibleCount)
+
+  const CAMPOS_ASC_POR_DEFECTO: CampoOrden[] = ['cliente_nombre', 'bloque', 'tipo_cliente']
+
+  const ordenarPor = (campo: CampoOrden) => {
+    setOrden((o) =>
+      o.campo === campo
+        ? { campo, dir: o.dir === 'asc' ? 'desc' : 'asc' }
+        : { campo, dir: CAMPOS_ASC_POR_DEFECTO.includes(campo) ? 'asc' : 'desc' }
+    )
+  }
+
+  const IconoOrden = ({ campo }: { campo: CampoOrden }) => {
+    if (orden.campo !== campo) return <ArrowUpDown size={12} className="opacity-40" />
+    return orden.dir === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />
+  }
+
+  const exportarCSV = () => {
+    descargarCSV(
+      `aportes_${new Date().toISOString().slice(0, 10)}.csv`,
+      ['Fecha', 'Cliente', 'Bloque', 'Tipo', 'Moneda', 'Monto', 'Nota'],
+      aportesOrdenados.map((a) => [
+        a.fecha,
+        a.cliente_nombre,
+        nombreBloque(a.bloque_id),
+        a.tipo_cliente === 'nuevo' ? 'Nuevo' : 'Existente',
+        a.moneda,
+        a.monto,
+        a.nota ?? '',
+      ])
+    )
+  }
 
   const abrirNuevo = () => {
     setEditando(undefined)
@@ -49,14 +124,27 @@ export function Aportes() {
       if (editando) await actualizarAporte(editando.id, payload)
       else await crearAporte(payload)
       setModalOpen(false)
+      toast.success(editando ? 'Aporte actualizado' : 'Aporte guardado')
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'No se pudo guardar el aporte')
     } finally {
       setSaving(false)
     }
   }
 
   const borrar = async (a: Aporte) => {
-    if (!confirm(`¿Eliminar el aporte de ${a.cliente_nombre} (${formatMoneda(a.monto, a.moneda)})?`)) return
-    await eliminarAporte(a.id)
+    const ok = await confirm({
+      title: 'Eliminar aporte',
+      message: `¿Eliminar el aporte de ${a.cliente_nombre} (${formatMoneda(a.monto, a.moneda)})?`,
+      danger: true,
+    })
+    if (!ok) return
+    try {
+      await eliminarAporte(a.id)
+      toast.success('Aporte eliminado')
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'No se pudo eliminar el aporte')
+    }
   }
 
   return (
@@ -66,12 +154,23 @@ export function Aportes() {
           <h1 className="text-2xl font-extrabold tracking-tight text-ink-900 dark:text-ink-50">Aportes</h1>
           <p className="mt-0.5 text-sm text-ink-400">Carga individual de cada aporte de cliente, por bloque</p>
         </div>
-        <PrimaryButton onClick={abrirNuevo} className="flex items-center gap-2">
-          <Plus size={16} /> Nuevo aporte
-        </PrimaryButton>
+        <div className="flex items-center gap-2">
+          <GhostButton onClick={exportarCSV} className="flex items-center gap-2">
+            <Download size={16} /> Exportar CSV
+          </GhostButton>
+          <PrimaryButton onClick={abrirNuevo} className="flex items-center gap-2">
+            <Plus size={16} /> Nuevo aporte
+          </PrimaryButton>
+        </div>
       </div>
 
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3">
+        <Input
+          value={filtroTexto}
+          onChange={(e) => setFiltroTexto(e.target.value)}
+          placeholder="Buscar cliente..."
+          className="w-56"
+        />
         <Select value={filtroBloque} onChange={(e) => setFiltroBloque(e.target.value)} className="w-56">
           <option value="todos">Todos los bloques</option>
           {bloques.map((b) => (
@@ -80,29 +179,59 @@ export function Aportes() {
             </option>
           ))}
         </Select>
+        <Input
+          type="date"
+          value={filtroDesde}
+          onChange={(e) => setFiltroDesde(e.target.value)}
+          className="w-40"
+          title="Desde"
+        />
+        <Input
+          type="date"
+          value={filtroHasta}
+          onChange={(e) => setFiltroHasta(e.target.value)}
+          className="w-40"
+          title="Hasta"
+        />
         <span className="text-xs text-ink-400">{aportesFiltrados.length} aportes</span>
       </div>
+
+
 
       <div className="overflow-hidden rounded-xl border border-ink-100 bg-white shadow-card dark:border-ink-800 dark:bg-ink-900">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-ink-100 bg-ink-50/60 text-left text-[11px] font-semibold uppercase tracking-wide text-ink-400 dark:border-ink-800 dark:bg-ink-800/40">
-              <th className="px-5 py-3">Fecha</th>
-              <th className="px-5 py-3">Cliente</th>
-              <th className="px-5 py-3">Bloque</th>
-              <th className="px-5 py-3">Tipo</th>
-              <th className="px-5 py-3 text-right">Monto</th>
+              <th className="px-5 py-3">
+                <button onClick={() => ordenarPor('fecha')} className="flex items-center gap-1 hover:text-ink-700 dark:hover:text-ink-100">
+                  Fecha <IconoOrden campo="fecha" />
+                </button>
+              </th>
+              <th className="px-5 py-3">
+                <button onClick={() => ordenarPor('cliente_nombre')} className="flex items-center gap-1 hover:text-ink-700 dark:hover:text-ink-100">
+                  Cliente <IconoOrden campo="cliente_nombre" />
+                </button>
+              </th>
+              <th className="px-5 py-3">
+                <button onClick={() => ordenarPor('bloque')} className="flex items-center gap-1 hover:text-ink-700 dark:hover:text-ink-100">
+                  Bloque <IconoOrden campo="bloque" />
+                </button>
+              </th>
+              <th className="px-5 py-3">
+                <button onClick={() => ordenarPor('tipo_cliente')} className="flex items-center gap-1 hover:text-ink-700 dark:hover:text-ink-100">
+                  Tipo <IconoOrden campo="tipo_cliente" />
+                </button>
+              </th>
+              <th className="px-5 py-3 text-right">
+                <button onClick={() => ordenarPor('monto')} className="ml-auto flex items-center gap-1 hover:text-ink-700 dark:hover:text-ink-100">
+                  Monto <IconoOrden campo="monto" />
+                </button>
+              </th>
               <th className="px-5 py-3" />
             </tr>
           </thead>
           <tbody>
-            {loading && (
-              <tr>
-                <td colSpan={6} className="px-5 py-8 text-center text-ink-400">
-                  Cargando…
-                </td>
-              </tr>
-            )}
+            {loading && <SkeletonTableRows cols={6} rows={5} />}
             {!loading && aportesFiltrados.length === 0 && (
               <tr>
                 <td colSpan={6} className="px-5 py-8 text-center text-ink-400">
@@ -110,15 +239,27 @@ export function Aportes() {
                 </td>
               </tr>
             )}
-            {aportesFiltrados.map((a) => (
-              <tr
-                key={a.id}
-                className="border-b border-ink-50 last:border-0 hover:bg-ink-50/50 dark:border-ink-800/60 dark:hover:bg-ink-800/30"
-              >
+            <AnimatePresence initial={false}>
+              {aportesPaginados.map((a) => (
+                <motion.tr
+                  key={a.id}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.18 }}
+                  className="border-b border-ink-50 last:border-0 hover:bg-ink-50/50 dark:border-ink-800/60 dark:hover:bg-ink-800/30"
+                >
                 <td className="tabular px-5 py-3 text-ink-500">{a.fecha}</td>
                 <td className="px-5 py-3 font-medium text-ink-900 dark:text-ink-50">
                   {a.cliente_nombre}
                   {a.nota && <div className="text-xs font-normal text-ink-400">{a.nota}</div>}
+                  <div
+                    className="text-[11px] font-normal text-ink-300 dark:text-ink-600"
+                    title={`Cargado: ${formatFechaHora(a.created_at)}${a.updated_at !== a.created_at ? ` · Editado: ${formatFechaHora(a.updated_at)}` : ''}`}
+                  >
+                    Cargado {formatFechaHora(a.created_at)}
+                    {a.updated_at !== a.created_at && ' · editado'}
+                  </div>
                 </td>
                 <td className="px-5 py-3 text-ink-500">{nombreBloque(a.bloque_id)}</td>
                 <td className="px-5 py-3">
@@ -154,11 +295,20 @@ export function Aportes() {
                     </button>
                   </div>
                 </td>
-              </tr>
-            ))}
+                </motion.tr>
+              ))}
+            </AnimatePresence>
           </tbody>
         </table>
       </div>
+
+      {aportesOrdenados.length > visibleCount && (
+        <div className="flex justify-center">
+          <GhostButton onClick={() => setVisibleCount((v) => v + PAGINA)}>
+            Cargar más ({aportesOrdenados.length - visibleCount} restantes)
+          </GhostButton>
+        </div>
+      )}
 
       <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={editando ? 'Editar aporte' : 'Nuevo aporte'}>
         <AporteForm

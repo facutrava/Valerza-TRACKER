@@ -1,9 +1,9 @@
 -- ============================================================================
--- Valerza · Seed inicial
+-- Sales Tracker · Seed inicial
 -- Ejecutar DESPUÉS de schema.sql, una sola vez.
--- Carga: los 3 bloques fijos, los objetivos 2026 tal como los definió Valerza,
--- y el histórico Ene-Jul 2026 migrado desde la planilla de Excel (sin detalle
--- de cliente, tal como se acordó).
+-- Carga: los 3 bloques fijos, los objetivos 2026 definidos, y el histórico
+-- Ene-Jul 2026 migrado desde la planilla de Excel (sin detalle de cliente,
+-- tal como se acordó).
 -- ============================================================================
 
 -- ----------------------------------------------------------------------------

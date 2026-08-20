@@ -1,9 +1,11 @@
 import { useMemo, useState } from 'react'
 import { Check } from 'lucide-react'
 import { useData } from '../context/DataContext'
+import { useToast } from '../context/ToastContext'
 import { periodosDelAnio } from '../utils/calculations'
 import { formatMoneda, labelForPeriodo } from '../utils/format'
 import { MonedaBadge } from '../components/MonedaBadge'
+import { Skeleton } from '../components/Skeleton'
 
 const currentYear = new Date().getFullYear()
 
@@ -21,6 +23,7 @@ function FilaObjetivo({
   montoActual: number | null
 }) {
   const { upsertObjetivo } = useData()
+  const toast = useToast()
   const [valor, setValor] = useState(montoActual !== null ? String(montoActual) : '')
   const [dirty, setDirty] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -31,6 +34,9 @@ function FilaObjetivo({
     try {
       await upsertObjetivo({ bloque_id: bloqueId, periodo_key: periodoKey, anio, moneda, monto: Number(valor) })
       setDirty(false)
+      toast.success('Objetivo actualizado')
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'No se pudo guardar el objetivo')
     } finally {
       setSaving(false)
     }
@@ -84,7 +90,16 @@ export function Objetivos() {
     return Array.from(set).sort()
   }, [objetivos])
 
-  if (loading) return <div className="p-8 text-sm text-ink-400">Cargando…</div>
+  if (loading) {
+    return (
+      <div className="space-y-8 p-8">
+        <Skeleton className="h-8 w-48" />
+        {Array.from({ length: 3 }, (_, i) => (
+          <Skeleton key={i} className="h-40 w-full rounded-xl" />
+        ))}
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-8 p-8">
@@ -92,7 +107,7 @@ export function Objetivos() {
         <div>
           <h1 className="text-2xl font-extrabold tracking-tight text-ink-900 dark:text-ink-50">Objetivos</h1>
           <p className="mt-0.5 text-sm text-ink-400">
-            Metas fijadas por Valerza para cada bloque. Se pueden cargar de antemano al arrancar un año nuevo.
+            Metas fijadas para cada bloque. Se pueden cargar de antemano al arrancar un año nuevo.
           </p>
         </div>
         <select

@@ -122,7 +122,7 @@ export function AporteForm({
       <Field label="Tipo de cliente">
         <Select value={values.tipo_cliente} onChange={(e) => set('tipo_cliente', e.target.value as TipoCliente)}>
           <option value="existente">Existente</option>
-          <option value="nuevo">Nuevo para Valerza</option>
+          <option value="nuevo">Nuevo</option>
         </Select>
       </Field>
 

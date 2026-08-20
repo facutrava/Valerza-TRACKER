@@ -28,7 +28,7 @@ export function generarReportePDF(input: ReporteInput) {
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(18)
   doc.setTextColor(...NAVY)
-  doc.text('Valerza', margin, y)
+  doc.text('Sales Tracker', margin, y)
 
   doc.setFont('helvetica', 'normal')
   doc.setFontSize(9)
@@ -53,7 +53,7 @@ export function generarReportePDF(input: ReporteInput) {
   doc.setFont('helvetica', 'normal')
   doc.setFontSize(10)
   doc.setTextColor(...GRIS_TEXTO)
-  doc.text(`Preparado para ${input.preparadoPara || 'Valerza'}  ·  Período: ${input.rangoLabel}`, margin, y)
+  doc.text(`Preparado para ${input.preparadoPara || 'Sales Tracker'}  ·  Período: ${input.rangoLabel}`, margin, y)
 
   y += 26
 
@@ -143,5 +143,5 @@ export function generarReportePDF(input: ReporteInput) {
     doc.internal.pageSize.getHeight() - 24
   )
 
-  doc.save(`Valerza_Resultados_${input.rangoLabel.replace(/\s+/g, '_')}.pdf`)
+  doc.save(`SalesTracker_Resultados_${input.rangoLabel.replace(/\s+/g, '_')}.pdf`)
 }

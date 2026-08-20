@@ -1,3 +1,4 @@
+import { motion } from 'framer-motion'
 import type { InputHTMLAttributes, ReactNode, SelectHTMLAttributes } from 'react'
 
 export function Field({ label, children }: { label: string; children: ReactNode }) {
@@ -22,9 +23,15 @@ export function Select(props: SelectHTMLAttributes<HTMLSelectElement>) {
   return <select {...props} className={`${baseInputCls} ${props.className ?? ''}`} />
 }
 
-export function PrimaryButton(props: React.ButtonHTMLAttributes<HTMLButtonElement>) {
+type ButtonProps = Omit<
+  React.ButtonHTMLAttributes<HTMLButtonElement>,
+  'onDrag' | 'onDragStart' | 'onDragEnd' | 'onAnimationStart' | 'onAnimationEnd' | 'onAnimationIteration'
+>
+
+export function PrimaryButton(props: ButtonProps) {
   return (
-    <button
+    <motion.button
+      whileTap={{ scale: 0.97 }}
       {...props}
       className={`rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-card transition-colors hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50 ${
         props.className ?? ''
@@ -33,9 +40,10 @@ export function PrimaryButton(props: React.ButtonHTMLAttributes<HTMLButtonElemen
   )
 }
 
-export function GhostButton(props: React.ButtonHTMLAttributes<HTMLButtonElement>) {
+export function GhostButton(props: ButtonProps) {
   return (
-    <button
+    <motion.button
+      whileTap={{ scale: 0.97 }}
       {...props}
       className={`rounded-lg border border-ink-200 px-4 py-2.5 text-sm font-semibold text-ink-600 transition-colors hover:bg-ink-50 dark:border-ink-700 dark:text-ink-300 dark:hover:bg-ink-800 ${
         props.className ?? ''

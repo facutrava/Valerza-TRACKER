@@ -13,6 +13,17 @@ body {
   font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;
 }
 
+/* Transición suave al cambiar de tema, acotada a los contenedores estructurales
+   (no un selector global "*", para no pisar las animaciones de framer-motion
+   ni afectar el rendimiento de tablas con muchas filas). */
+body,
+aside,
+main {
+  transition:
+    background-color 200ms ease,
+    color 200ms ease;
+}
+
 /* Números tabulares para que las tablas de montos alineen prolijo */
 .tabular {
   font-variant-numeric: tabular-nums;

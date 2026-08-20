@@ -1,5 +1,5 @@
 -- ============================================================================
--- Valerza · Seguimiento de resultados comerciales
+-- Sales Tracker · Seguimiento de resultados comerciales
 -- Esquema de base de datos (Supabase / Postgres)
 -- Ejecutar completo en el SQL Editor de Supabase, una sola vez.
 -- ============================================================================
@@ -19,7 +19,7 @@ create table if not exists bloques (
 );
 
 -- ----------------------------------------------------------------------------
--- OBJETIVOS: metas fijadas por Valerza para cada bloque y período.
+-- OBJETIVOS: metas fijadas para cada bloque y período.
 -- ON tiene dos filas por período (una ARS, una USD). AMERIAN y MARTIN BRONCE
 -- tienen una sola fila (USD) por período.
 -- ----------------------------------------------------------------------------
