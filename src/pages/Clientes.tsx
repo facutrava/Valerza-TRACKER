@@ -109,7 +109,7 @@ export function Clientes() {
                   >
                     <td className="px-5 py-3 font-medium text-ink-900 dark:text-ink-50">{c.nombre}</td>
                     <td className="px-5 py-3 text-xs text-ink-500">{c.bloques.join(', ')}</td>
-                    <td className="tabular px-5 py-3 text-right text-ink-500">{c.cantidad}</td>
+                    <td className="tabular px-5 py-3 text-right text-ink-500">{c.cantidad.toLocaleString('es-AR')}</td>
                     <td className="tabular px-5 py-3 text-right font-semibold text-ink-900 dark:text-ink-50">
                       {c.totalArs > 0 ? formatARS(c.totalArs) : '—'}
                     </td>

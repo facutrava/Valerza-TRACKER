@@ -43,8 +43,9 @@ export function StatCard({
     <motion.div
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
+      whileHover={{ y: -3 }}
       transition={{ duration: 0.3, delay }}
-      className={`relative overflow-hidden rounded-xl border border-ink-100 bg-white shadow-card dark:border-ink-800 dark:bg-ink-900 ${
+      className={`relative overflow-hidden rounded-xl border border-ink-100 bg-white shadow-card transition-shadow duration-200 hover:shadow-lg dark:border-ink-800 dark:bg-ink-900 ${
         isHero ? 'p-8' : 'p-5'
       }`}
     >
@@ -54,7 +55,15 @@ export function StatCard({
       />
       {isHero ? (
         <div className="relative flex flex-wrap items-center justify-center gap-4">
-          {icon && <div className="shrink-0 text-brand-600 dark:text-brand-400">{icon}</div>}
+          {icon && (
+            <motion.div
+              animate={{ scale: [1, 1.06, 1] }}
+              transition={{ duration: 2.8, repeat: Infinity, ease: 'easeInOut' }}
+              className="shrink-0 text-brand-600 dark:text-brand-400"
+            >
+              {icon}
+            </motion.div>
+          )}
           <div className="text-[11px] font-semibold uppercase tracking-wider text-ink-400">{eyebrow}</div>
           <div className="tabular whitespace-nowrap text-4xl font-bold tracking-tight text-ink-900 dark:text-ink-50 sm:text-5xl">
             {displayValue}

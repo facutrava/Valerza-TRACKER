@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { AnimatePresence, motion } from 'framer-motion'
 import {
   Bar,
   BarChart,
@@ -15,18 +16,21 @@ import { AlertTriangle, TrendingUp, TrendingDown, Minus, Wallet, Target as Targe
 import { useData } from '../context/DataContext'
 import { StatCard } from '../components/StatCard'
 import { Skeleton } from '../components/Skeleton'
+import { RevealSection } from '../components/RevealSection'
 import {
   cumplimientoAcumulado,
   fraccionAnioTranscurrida,
   resultadosAnio,
   totalConsolidadoUSD,
 } from '../utils/calculations'
-import { formatARS, formatPct, formatUSD } from '../utils/format'
+import { formatARS, formatARSCompacto, formatPct, formatUSD, formatUSDCompacto } from '../utils/format'
 
 const currentYear = new Date().getFullYear()
 
-/** Props de animación compartidas por todas las barras de los gráficos del panel. */
-const CHART_ANIM = { isAnimationActive: true, animationDuration: 500 } as const
+/** Props de animación compartidas por todas las barras de los gráficos del panel — "fill up" al montar. */
+const CHART_ANIM = { isAnimationActive: true, animationDuration: 900, animationEasing: 'ease-out' } as const
+/** Para gráficos con dos series: la segunda barra arranca un poco después, para que el llenado se note más. */
+const CHART_ANIM_2 = { ...CHART_ANIM, animationBegin: 200 } as const
 
 interface TooltipRow {
   label: string
@@ -87,26 +91,50 @@ function ComparacionTooltip({ active, payload }: { active?: boolean; payload?: {
   )
 }
 
-interface OnTooltipDatum {
+interface ObjetivoLogradoGenericoDatum {
   label: string
-  cumplimiento_ars: number
-  cumplimiento_usd: number
-  logrado_ars: number
-  logrado_usd: number
+  objetivo: number
+  logrado: number
 }
 
-function OnEvolucionTooltip({ active, payload }: { active?: boolean; payload?: { payload: OnTooltipDatum }[] }) {
+/** Igual que ObjetivoLogradoTooltip pero con formato de moneda configurable — usado por los
+ * dos gráficos de ON (ARS/USD), que no siempre están en dólares. */
+function ObjetivoLogradoGenericoTooltip({
+  active,
+  payload,
+  color,
+  format,
+}: {
+  active?: boolean
+  payload?: { payload: ObjetivoLogradoGenericoDatum }[]
+  color: string
+  format: (n: number) => string
+}) {
   if (!active || !payload?.length) return null
   const d = payload[0].payload
+  const pct = d.objetivo ? d.logrado / d.objetivo : null
   return (
     <ChartTooltipCard
       title={d.label}
       rows={[
-        { label: 'Facturación ARS', value: formatARS(d.logrado_ars), color: '#B01C2E', sub: `${formatPct(d.cumplimiento_ars)} del objetivo` },
-        { label: 'Facturación USD', value: formatUSD(d.logrado_usd), color: '#1e40af', sub: `${formatPct(d.cumplimiento_usd)} del objetivo` },
+        {
+          label: 'Facturación',
+          value: format(d.logrado),
+          color,
+          sub: pct !== null ? `${formatPct(pct)} del objetivo` : undefined,
+        },
+        { label: 'Objetivo', value: format(d.objetivo), color: '#9aa0ab' },
       ]}
     />
   )
+}
+
+function OnArsEvolucionTooltip(props: { active?: boolean; payload?: { payload: ObjetivoLogradoGenericoDatum }[] }) {
+  return <ObjetivoLogradoGenericoTooltip {...props} color="#B01C2E" format={formatARS} />
+}
+
+function OnUsdEvolucionTooltip(props: { active?: boolean; payload?: { payload: ObjetivoLogradoGenericoDatum }[] }) {
+  return <ObjetivoLogradoGenericoTooltip {...props} color="#1e40af" format={formatUSD} />
 }
 
 interface ObjetivoLogradoDatum {
@@ -286,6 +314,18 @@ export function Dashboard() {
   )
 
   const onResultados = resultadosAnio(on, anio, objetivos, aportes, historico)
+  const onArsData = onResultados.map((r) => ({
+    labelCorto: r.label.split(' ')[0].slice(0, 3),
+    label: r.label,
+    objetivo: r.objetivo_ars ?? 0,
+    logrado: r.logrado_ars,
+  }))
+  const onUsdData = onResultados.map((r) => ({
+    labelCorto: r.label.split(' ')[0].slice(0, 3),
+    label: r.label,
+    objetivo: r.objetivo_usd ?? 0,
+    logrado: r.logrado_usd,
+  }))
   const amerianResultados = resultadosAnio(amerian, anio, objetivos, aportes, historico)
   const mbResultados = aniosDisponibles.map((a) => {
     const [r] = resultadosAnio(martinBronce, a, objetivos, aportes, historico)
@@ -314,43 +354,63 @@ export function Dashboard() {
         </select>
       </div>
 
-      {pendientesGlobal > 0 && (
-        <div className="flex items-start gap-3 rounded-xl border border-gold-800/25 bg-gold-100/60 px-4 py-3 text-sm text-gold-800 dark:border-gold-800/40 dark:bg-gold-800/10 dark:text-gold-100">
-          <AlertTriangle size={18} className="mt-0.5 shrink-0" />
-          <span>
-            Hay {pendientesGlobal} movimiento{pendientesGlobal > 1 ? 's' : ''} en pesos sin cotización MEP de
-            cierre de mes cargada — no se están incluyendo en el capital consolidado en USD. Completala en{' '}
-            <strong>Cotizaciones MEP</strong>.
-          </span>
-        </div>
-      )}
+      <AnimatePresence initial={false}>
+        {pendientesGlobal > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: -8, height: 0 }}
+            animate={{ opacity: 1, y: 0, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.3 }}
+            className="flex items-start gap-3 overflow-hidden rounded-xl border border-gold-800/25 bg-gold-100/60 px-4 py-3 text-sm text-gold-800 dark:border-gold-800/40 dark:bg-gold-800/10 dark:text-gold-100"
+          >
+            <AlertTriangle size={18} className="mt-0.5 shrink-0" />
+            <span>
+              Hay {pendientesGlobal} movimiento{pendientesGlobal > 1 ? 's' : ''} en pesos sin cotización MEP de
+              cierre de mes cargada — no se están incluyendo en el capital consolidado en USD. Completala en{' '}
+              <strong>Cotizaciones MEP</strong>.
+            </span>
+          </motion.div>
+        )}
 
-      {!cotizacionMesActual && (
-        <div className="flex items-start gap-3 rounded-xl border border-dollar-800/25 bg-dollar-100/60 px-4 py-3 text-sm text-dollar-800 dark:border-dollar-800/40 dark:bg-dollar-800/10 dark:text-dollar-100">
-          <AlertTriangle size={18} className="mt-0.5 shrink-0" />
-          <span>
-            Todavía no cargaste la cotización MEP de este mes.{' '}
-            <Link to="/cotizaciones" className="font-semibold underline">
-              Cargarla en Cotizaciones MEP
-            </Link>
-            .
-          </span>
-        </div>
-      )}
+        {!cotizacionMesActual && (
+          <motion.div
+            initial={{ opacity: 0, y: -8, height: 0 }}
+            animate={{ opacity: 1, y: 0, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.3, delay: 0.05 }}
+            className="flex items-start gap-3 overflow-hidden rounded-xl border border-dollar-800/25 bg-dollar-100/60 px-4 py-3 text-sm text-dollar-800 dark:border-dollar-800/40 dark:bg-dollar-800/10 dark:text-dollar-100"
+          >
+            <AlertTriangle size={18} className="mt-0.5 shrink-0" />
+            <span>
+              Todavía no cargaste la cotización MEP de este mes.{' '}
+              <Link to="/cotizaciones" className="font-semibold underline">
+                Cargarla en Cotizaciones MEP
+              </Link>
+              .
+            </span>
+          </motion.div>
+        )}
 
-      {bloquesAtrasados.length > 0 && (
-        <div className="flex items-start gap-3 rounded-xl border border-brand-600/25 bg-brand-50 px-4 py-3 text-sm text-brand-700 dark:border-brand-600/40 dark:bg-brand-900/10 dark:text-brand-200">
-          <TrendingDown size={18} className="mt-0.5 shrink-0" />
-          <span>
-            Al ritmo actual, {bloquesAtrasados.length > 1 ? 'estos bloques van' : 'este bloque va'} a cerrar el año
-            por debajo del objetivo:{' '}
-            <strong>
-              {bloquesAtrasados.map((r) => `${r.nombre} (${formatPct(r.proyeccionPct ?? 0)})`).join(', ')}
-            </strong>
-            .
-          </span>
-        </div>
-      )}
+        {bloquesAtrasados.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: -8, height: 0 }}
+            animate={{ opacity: 1, y: 0, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.3, delay: 0.1 }}
+            className="flex items-start gap-3 overflow-hidden rounded-xl border border-brand-600/25 bg-brand-50 px-4 py-3 text-sm text-brand-700 dark:border-brand-600/40 dark:bg-brand-900/10 dark:text-brand-200"
+          >
+            <TrendingDown size={18} className="mt-0.5 shrink-0" />
+            <span>
+              Al ritmo actual, {bloquesAtrasados.length > 1 ? 'estos bloques van' : 'este bloque va'} a cerrar el año
+              por debajo del objetivo:{' '}
+              <strong>
+                {bloquesAtrasados.map((r) => `${r.nombre} (${formatPct(r.proyeccionPct ?? 0)})`).join(', ')}
+              </strong>
+              .
+            </span>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Capital acumulado */}
       <StatCard
@@ -408,164 +468,223 @@ export function Dashboard() {
       </div>
 
       {/* Comparación entre bloques */}
-      <section className="rounded-xl border border-ink-100 bg-white p-6 shadow-card dark:border-ink-800 dark:bg-ink-900">
-        <h2 className="text-base font-bold text-ink-900 dark:text-ink-50">Comparación entre bloques</h2>
-        <p className="mt-0.5 text-xs text-ink-400">% de cumplimiento acumulado a la fecha, por bloque y moneda</p>
-        <div className="mt-4 h-64">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={comparacionData} margin={{ left: 12, right: 24 }}>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} className="stroke-ink-100 dark:stroke-ink-800" />
-              <XAxis type="category" dataKey="nombre" stroke="currentColor" className="text-ink-500" fontSize={12} />
-              <YAxis type="number" tickFormatter={(v) => formatPct(v)} stroke="currentColor" className="text-ink-400" fontSize={12} />
-              <Tooltip content={<ComparacionTooltip />} {...tooltipAnchorProps} />
-              <Bar dataKey="pct" name="Cumplimiento" radius={[6, 6, 0, 0]} {...CHART_ANIM}>
-                {comparacionData.map((d, i) => (
-                  <Cell key={i} fill={d.color} />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      </section>
+      <RevealSection className="rounded-xl border border-ink-100 bg-white p-6 shadow-card dark:border-ink-800 dark:bg-ink-900">
+        {(inView) => (
+          <>
+            <h2 className="text-base font-bold text-ink-900 dark:text-ink-50">Comparación entre bloques</h2>
+            <p className="mt-0.5 text-xs text-ink-400">% de cumplimiento acumulado a la fecha, por bloque y moneda</p>
+            <div className="mt-4 h-64">
+              {inView && (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={comparacionData} margin={{ left: 12, right: 24 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} className="stroke-ink-100 dark:stroke-ink-800" />
+                    <XAxis type="category" dataKey="nombre" stroke="currentColor" className="text-ink-500" fontSize={12} />
+                    <YAxis type="number" tickFormatter={(v) => formatPct(v)} stroke="currentColor" className="text-ink-400" fontSize={12} />
+                    <Tooltip content={<ComparacionTooltip />} {...tooltipAnchorProps} />
+                    <Bar dataKey="pct" name="Cumplimiento" radius={[6, 6, 0, 0]} {...CHART_ANIM}>
+                      {comparacionData.map((d, i) => (
+                        <Cell key={i} fill={d.color} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+          </>
+        )}
+      </RevealSection>
 
       {/* Comparativa año a año + proyección de ritmo */}
-      <section className="overflow-hidden rounded-xl border border-ink-100 bg-white shadow-card dark:border-ink-800 dark:bg-ink-900">
-        <div className="px-6 pt-6">
-          <h2 className="text-base font-bold text-ink-900 dark:text-ink-50">Comparativa y proyección</h2>
-          <p className="mt-0.5 text-xs text-ink-400">
-            {anio} vs {anio - 1}
-            {esAnioActual && ' · proyección a fin de año, según el ritmo actual'}
-          </p>
-        </div>
-        <table className="mt-4 w-full text-sm">
-          <thead>
-            <tr className="border-b border-ink-100 bg-ink-50/60 text-left text-[11px] font-semibold uppercase tracking-wide text-ink-400 dark:border-ink-800 dark:bg-ink-800/40">
-              <th className="px-6 py-2.5">Bloque</th>
-              <th className="px-6 py-2.5 text-right">{anio}</th>
-              <th className="px-6 py-2.5 text-right">{anio - 1}</th>
-              <th className="px-6 py-2.5 text-right">Variación</th>
-              {esAnioActual && <th className="px-6 py-2.5 text-right">Proyección</th>}
-            </tr>
-          </thead>
-          <tbody>
-            {analisisAnualData.map((r) => {
-              const format = r.moneda === 'ARS' ? formatARS : formatUSD
-              return (
-                <tr key={r.nombre} className="border-b border-ink-50 last:border-0 dark:border-ink-800/60">
-                  <td className="px-6 py-2.5 text-ink-700 dark:text-ink-200">{r.nombre}</td>
-                  <td className="tabular px-6 py-2.5 text-right font-semibold text-ink-900 dark:text-ink-50">
-                    {format(r.logrado)}
-                  </td>
-                  <td className="tabular px-6 py-2.5 text-right text-ink-400">
-                    {r.logradoAnterior > 0 ? format(r.logradoAnterior) : '—'}
-                  </td>
-                  <td className="tabular px-6 py-2.5 text-right">
-                    {r.deltaPct === null ? (
-                      <span className="text-ink-300 dark:text-ink-600">s/d</span>
-                    ) : (
-                      <span
-                        className={`inline-flex items-center gap-1 font-semibold ${
-                          r.deltaPct > 0
-                            ? 'text-emerald-600'
-                            : r.deltaPct < 0
-                              ? 'text-brand-600'
-                              : 'text-ink-400'
-                        }`}
-                      >
-                        {r.deltaPct > 0 ? (
-                          <TrendingUp size={13} />
-                        ) : r.deltaPct < 0 ? (
-                          <TrendingDown size={13} />
-                        ) : (
-                          <Minus size={13} />
-                        )}
-                        {formatPct(Math.abs(r.deltaPct))}
-                      </span>
-                    )}
-                  </td>
-                  {esAnioActual && (
-                    <td className="tabular px-6 py-2.5 text-right text-ink-500">
-                      {r.proyeccionPct === null ? '—' : formatPct(r.proyeccionPct)}
-                    </td>
-                  )}
+      <RevealSection className="overflow-hidden rounded-xl border border-ink-100 bg-white shadow-card dark:border-ink-800 dark:bg-ink-900">
+        {(inView) => (
+          <>
+            <div className="px-6 pt-6">
+              <h2 className="text-base font-bold text-ink-900 dark:text-ink-50">Comparativa y proyección</h2>
+              <p className="mt-0.5 text-xs text-ink-400">
+                {anio} vs {anio - 1}
+                {esAnioActual && ' · proyección a fin de año, según el ritmo actual'}
+              </p>
+            </div>
+            <table className="mt-4 w-full text-sm">
+              <thead>
+                <tr className="border-b border-ink-100 bg-ink-50/60 text-left text-[11px] font-semibold uppercase tracking-wide text-ink-400 dark:border-ink-800 dark:bg-ink-800/40">
+                  <th className="px-6 py-2.5">Bloque</th>
+                  <th className="px-6 py-2.5 text-right">{anio}</th>
+                  <th className="px-6 py-2.5 text-right">{anio - 1}</th>
+                  <th className="px-6 py-2.5 text-right">Variación</th>
+                  {esAnioActual && <th className="px-6 py-2.5 text-right">Proyección</th>}
                 </tr>
-              )
-            })}
-          </tbody>
-        </table>
-      </section>
+              </thead>
+              <tbody>
+                {analisisAnualData.map((r, i) => {
+                  const format = r.moneda === 'ARS' ? formatARS : formatUSD
+                  return (
+                    <motion.tr
+                      key={r.nombre}
+                      initial={{ opacity: 0, x: -10 }}
+                      animate={inView ? { opacity: 1, x: 0 } : undefined}
+                      transition={{ duration: 0.3, delay: i * 0.06 }}
+                      className="border-b border-ink-50 last:border-0 dark:border-ink-800/60"
+                    >
+                      <td className="px-6 py-2.5 text-ink-700 dark:text-ink-200">{r.nombre}</td>
+                      <td className="tabular px-6 py-2.5 text-right font-semibold text-ink-900 dark:text-ink-50">
+                        {format(r.logrado)}
+                      </td>
+                      <td className="tabular px-6 py-2.5 text-right text-ink-400">
+                        {r.logradoAnterior > 0 ? format(r.logradoAnterior) : '—'}
+                      </td>
+                      <td className="tabular px-6 py-2.5 text-right">
+                        {r.deltaPct === null ? (
+                          <span className="text-ink-300 dark:text-ink-600">s/d</span>
+                        ) : (
+                          <span
+                            className={`inline-flex items-center gap-1 font-semibold ${
+                              r.deltaPct > 0
+                                ? 'text-emerald-600'
+                                : r.deltaPct < 0
+                                  ? 'text-brand-600'
+                                  : 'text-ink-400'
+                            }`}
+                          >
+                            {r.deltaPct > 0 ? (
+                              <TrendingUp size={13} />
+                            ) : r.deltaPct < 0 ? (
+                              <TrendingDown size={13} />
+                            ) : (
+                              <Minus size={13} />
+                            )}
+                            {formatPct(Math.abs(r.deltaPct))}
+                          </span>
+                        )}
+                      </td>
+                      {esAnioActual && (
+                        <td className="tabular px-6 py-2.5 text-right text-ink-500">
+                          {r.proyeccionPct === null ? '—' : formatPct(r.proyeccionPct)}
+                        </td>
+                      )}
+                    </motion.tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </>
+        )}
+      </RevealSection>
 
       {/* Martín Bronce — objetivo anual */}
-      <section className="rounded-xl border border-ink-100 bg-white p-6 shadow-card dark:border-ink-800 dark:bg-ink-900">
-        <div>
-          <h2 className="text-base font-bold text-ink-900 dark:text-ink-50">Martín Bronce — objetivo {anio}</h2>
-          <p className="mt-0.5 text-xs text-ink-400">Objetivo anual único en USD</p>
-        </div>
-        <div className="tabular mt-4 flex justify-between text-xs text-ink-400">
-          <span>{formatUSD(mbAcumulado.logradoUsd)} captado</span>
-          <span>Objetivo: {formatUSD(mbAcumulado.objetivoUsd)}</span>
-        </div>
-        <div className="mt-6 h-56">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={mbResultados}>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} className="stroke-ink-100 dark:stroke-ink-800" />
-              <XAxis dataKey="label" stroke="currentColor" className="text-ink-400" fontSize={12} />
-              <YAxis tickFormatter={(v) => `U$S ${(v / 1000).toFixed(0)}k`} stroke="currentColor" className="text-ink-400" fontSize={12} />
-              <Tooltip content={<MbEvolucionTooltip />} {...tooltipAnchorProps} />
-              <Legend wrapperStyle={{ fontSize: 12 }} />
-              <Bar dataKey="objetivo_usd" name="Objetivo" fill="#d9dade" radius={[4, 4, 0, 0]} {...CHART_ANIM} />
-              <Bar dataKey="logrado_usd" name="Facturación" fill="#92400E" radius={[4, 4, 0, 0]} {...CHART_ANIM} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      </section>
+      <RevealSection className="rounded-xl border border-ink-100 bg-white p-6 shadow-card dark:border-ink-800 dark:bg-ink-900">
+        {(inView) => (
+          <>
+            <div>
+              <h2 className="text-base font-bold text-ink-900 dark:text-ink-50">Martín Bronce — objetivo {anio}</h2>
+              <p className="mt-0.5 text-xs text-ink-400">Objetivo anual único en USD</p>
+            </div>
+            <div className="tabular mt-4 flex justify-between text-xs text-ink-400">
+              <span>{formatUSD(mbAcumulado.logradoUsd)} captado</span>
+              <span>Objetivo: {formatUSD(mbAcumulado.objetivoUsd)}</span>
+            </div>
+            <div className="mt-6 h-56">
+              {inView && (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={mbResultados}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} className="stroke-ink-100 dark:stroke-ink-800" />
+                    <XAxis dataKey="label" stroke="currentColor" className="text-ink-400" fontSize={12} />
+                    <YAxis tickFormatter={formatUSDCompacto} stroke="currentColor" className="text-ink-400" fontSize={12} />
+                    <Tooltip content={<MbEvolucionTooltip />} {...tooltipAnchorProps} />
+                    <Legend wrapperStyle={{ fontSize: 12 }} />
+                    <Bar dataKey="objetivo_usd" name="Objetivo" fill="#d9dade" radius={[4, 4, 0, 0]} {...CHART_ANIM} />
+                    <Bar dataKey="logrado_usd" name="Facturación" fill="#92400E" radius={[4, 4, 0, 0]} {...CHART_ANIM_2} />
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+          </>
+        )}
+      </RevealSection>
 
-      {/* Evolución ON */}
-      <section className="rounded-xl border border-ink-100 bg-white p-6 shadow-card dark:border-ink-800 dark:bg-ink-900">
-        <h2 className="text-base font-bold text-ink-900 dark:text-ink-50">Evolución mensual — ON</h2>
-        <p className="mt-0.5 text-xs text-ink-400">% de cumplimiento del objetivo, en pesos y en dólares</p>
-        <div className="mt-4 h-72">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart
-              data={onResultados.map((r) => ({
-                labelCorto: r.label.split(' ')[0].slice(0, 3),
-                label: r.label,
-                cumplimiento_ars: r.cumplimiento_ars ?? 0,
-                cumplimiento_usd: r.cumplimiento_usd ?? 0,
-                logrado_ars: r.logrado_ars,
-                logrado_usd: r.logrado_usd,
-              }))}
-            >
-              <CartesianGrid strokeDasharray="3 3" vertical={false} className="stroke-ink-100 dark:stroke-ink-800" />
-              <XAxis dataKey="labelCorto" stroke="currentColor" className="text-ink-400" fontSize={12} />
-              <YAxis tickFormatter={(v) => formatPct(v)} stroke="currentColor" className="text-ink-400" fontSize={12} />
-              <Tooltip content={<OnEvolucionTooltip />} {...tooltipAnchorProps} />
-              <Legend wrapperStyle={{ fontSize: 12 }} />
-              <Bar dataKey="cumplimiento_ars" name="Facturación ARS" fill="#B01C2E" radius={[4, 4, 0, 0]} {...CHART_ANIM} />
-              <Bar dataKey="cumplimiento_usd" name="Facturación USD" fill="#1e40af" radius={[4, 4, 0, 0]} {...CHART_ANIM} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      </section>
+      {/* Evolución ON — ARS y USD por separado */}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <RevealSection className="rounded-xl border border-ink-100 bg-white p-6 shadow-card dark:border-ink-800 dark:bg-ink-900">
+          {(inView) => (
+            <>
+              <h2 className="text-base font-bold text-ink-900 dark:text-ink-50">Evolución mensual — ON (ARS)</h2>
+              <p className="mt-0.5 text-xs text-ink-400">Objetivo vs. facturación captada, en pesos</p>
+              <div className="tabular mt-4 flex justify-between text-xs text-ink-400">
+                <span>{formatARS(onAcumulado.logradoArs)} captado</span>
+                <span>Objetivo: {formatARS(onAcumulado.objetivoArs)}</span>
+              </div>
+              <div className="mt-4 h-64">
+                {inView && (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={onArsData}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} className="stroke-ink-100 dark:stroke-ink-800" />
+                      <XAxis dataKey="labelCorto" stroke="currentColor" className="text-ink-400" fontSize={12} />
+                      <YAxis tickFormatter={formatARSCompacto} stroke="currentColor" className="text-ink-400" fontSize={12} />
+                      <Tooltip content={<OnArsEvolucionTooltip />} {...tooltipAnchorProps} />
+                      <Legend wrapperStyle={{ fontSize: 12 }} />
+                      <Bar dataKey="objetivo" name="Objetivo" fill="#d9dade" radius={[4, 4, 0, 0]} {...CHART_ANIM} />
+                      <Bar dataKey="logrado" name="Facturación" fill="#B01C2E" radius={[4, 4, 0, 0]} {...CHART_ANIM_2} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                )}
+              </div>
+            </>
+          )}
+        </RevealSection>
+
+        <RevealSection className="rounded-xl border border-ink-100 bg-white p-6 shadow-card dark:border-ink-800 dark:bg-ink-900" delay={0.08}>
+          {(inView) => (
+            <>
+              <h2 className="text-base font-bold text-ink-900 dark:text-ink-50">Evolución mensual — ON (USD)</h2>
+              <p className="mt-0.5 text-xs text-ink-400">Objetivo vs. facturación captada, en dólares</p>
+              <div className="tabular mt-4 flex justify-between text-xs text-ink-400">
+                <span>{formatUSD(onAcumulado.logradoUsd)} captado</span>
+                <span>Objetivo: {formatUSD(onAcumulado.objetivoUsd)}</span>
+              </div>
+              <div className="mt-4 h-64">
+                {inView && (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={onUsdData}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} className="stroke-ink-100 dark:stroke-ink-800" />
+                      <XAxis dataKey="labelCorto" stroke="currentColor" className="text-ink-400" fontSize={12} />
+                      <YAxis tickFormatter={formatUSDCompacto} stroke="currentColor" className="text-ink-400" fontSize={12} />
+                      <Tooltip content={<OnUsdEvolucionTooltip />} {...tooltipAnchorProps} />
+                      <Legend wrapperStyle={{ fontSize: 12 }} />
+                      <Bar dataKey="objetivo" name="Objetivo" fill="#d9dade" radius={[4, 4, 0, 0]} {...CHART_ANIM} />
+                      <Bar dataKey="logrado" name="Facturación" fill="#1e40af" radius={[4, 4, 0, 0]} {...CHART_ANIM_2} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                )}
+              </div>
+            </>
+          )}
+        </RevealSection>
+      </div>
 
       {/* Evolución Amerian */}
-      <section className="rounded-xl border border-ink-100 bg-white p-6 shadow-card dark:border-ink-800 dark:bg-ink-900">
-        <h2 className="text-base font-bold text-ink-900 dark:text-ink-50">Evolución trimestral — Amerian</h2>
-        <p className="mt-0.5 text-xs text-ink-400">Objetivo vs. facturación captada, en dólares</p>
-        <div className="mt-4 h-64">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={amerianResultados}>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} className="stroke-ink-100 dark:stroke-ink-800" />
-              <XAxis dataKey="label" stroke="currentColor" className="text-ink-400" fontSize={12} />
-              <YAxis tickFormatter={(v) => `U$S ${(v / 1000).toFixed(0)}k`} stroke="currentColor" className="text-ink-400" fontSize={12} />
-              <Tooltip content={<AmerianEvolucionTooltip />} {...tooltipAnchorProps} />
-              <Legend wrapperStyle={{ fontSize: 12 }} />
-              <Bar dataKey="objetivo_usd" name="Objetivo" fill="#d9dade" radius={[4, 4, 0, 0]} {...CHART_ANIM} />
-              <Bar dataKey="logrado_usd" name="Facturación" fill="#1e40af" radius={[4, 4, 0, 0]} {...CHART_ANIM} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      </section>
+      <RevealSection className="rounded-xl border border-ink-100 bg-white p-6 shadow-card dark:border-ink-800 dark:bg-ink-900">
+        {(inView) => (
+          <>
+            <h2 className="text-base font-bold text-ink-900 dark:text-ink-50">Evolución trimestral — Amerian</h2>
+            <p className="mt-0.5 text-xs text-ink-400">Objetivo vs. facturación captada, en dólares</p>
+            <div className="mt-4 h-64">
+              {inView && (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={amerianResultados}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} className="stroke-ink-100 dark:stroke-ink-800" />
+                    <XAxis dataKey="label" stroke="currentColor" className="text-ink-400" fontSize={12} />
+                    <YAxis tickFormatter={formatUSDCompacto} stroke="currentColor" className="text-ink-400" fontSize={12} />
+                    <Tooltip content={<AmerianEvolucionTooltip />} {...tooltipAnchorProps} />
+                    <Legend wrapperStyle={{ fontSize: 12 }} />
+                    <Bar dataKey="objetivo_usd" name="Objetivo" fill="#d9dade" radius={[4, 4, 0, 0]} {...CHART_ANIM} />
+                    <Bar dataKey="logrado_usd" name="Facturación" fill="#1e40af" radius={[4, 4, 0, 0]} {...CHART_ANIM_2} />
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+          </>
+        )}
+      </RevealSection>
     </div>
   )
 }

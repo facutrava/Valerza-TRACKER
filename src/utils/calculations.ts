@@ -42,8 +42,17 @@ function agregarLogrado(
   for (const a of aportes.filter((a) => a.bloque_id === bloque.id)) {
     const periodoKey = periodoKeyParaBloque(bloque.periodicidad, a.fecha)
     if (bloque.moneda_objetivo === 'DUAL') {
-      // ON: cada moneda cuenta directo contra su propio objetivo, sin conversión
-      add(periodoKey, a.moneda, a.monto)
+      // ON: cada moneda cuenta directo contra su propio objetivo. Excepción: un aporte puede
+      // tener una cotización de operación cargada cuando el destino real es el objetivo en la
+      // otra moneda (ej. inversión en USD pagada en pesos, o viceversa) — en ese caso se
+      // convierte y cuenta contra el objetivo opuesto al de la moneda del aporte.
+      if (a.moneda === 'ARS' && a.cotizacion_mep_operacion) {
+        add(periodoKey, 'USD', a.monto / a.cotizacion_mep_operacion)
+      } else if (a.moneda === 'USD' && a.cotizacion_mep_operacion) {
+        add(periodoKey, 'ARS', a.monto * a.cotizacion_mep_operacion)
+      } else {
+        add(periodoKey, a.moneda, a.monto)
+      }
     } else {
       // AMERIAN / MARTIN BRONCE: objetivo único en USD.
       // Un aporte en USD cuenta directo; uno en ARS se convierte con la

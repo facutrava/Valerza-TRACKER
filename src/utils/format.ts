@@ -18,6 +18,16 @@ export function formatUSD(monto: number): string {
   return 'U$S ' + new Intl.NumberFormat('es-AR', { maximumFractionDigits: 0 }).format(monto)
 }
 
+/** Versión compacta de USD para ejes de gráficos (ej: "U$S 12k"). */
+export function formatUSDCompacto(monto: number): string {
+  return 'U$S ' + new Intl.NumberFormat('es-AR', { maximumFractionDigits: 0 }).format(monto / 1000) + 'k'
+}
+
+/** Versión compacta de ARS para ejes de gráficos (ej: "$ 1,2M"). */
+export function formatARSCompacto(monto: number): string {
+  return '$ ' + new Intl.NumberFormat('es-AR', { maximumFractionDigits: 1 }).format(monto / 1_000_000) + 'M'
+}
+
 export function formatMoneda(monto: number, moneda: 'ARS' | 'USD'): string {
   return moneda === 'ARS' ? formatARS(monto) : formatUSD(monto)
 }

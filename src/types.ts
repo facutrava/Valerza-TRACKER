@@ -3,6 +3,8 @@
 export type Periodicidad = 'mensual' | 'trimestral' | 'anual'
 export type Moneda = 'ARS' | 'USD'
 export type TipoCliente = 'nuevo' | 'existente'
+export type TipoOperacion = 'nueva' | 'renovacion'
+export type Canal = 'efectivo' | 'transferencia' | 'cheque' | 'efectivo_transferencia' | 'on_valerza' | 'on_amerian'
 
 // slug fijo de cada bloque, usado en todo el código para no depender de nombres editables
 export type BloqueSlug = 'on' | 'amerian' | 'martin_bronce'
@@ -35,9 +37,15 @@ export interface Aporte {
   moneda: Moneda
   monto: number
   tipo_cliente: TipoCliente
-  // MEP cargado en el momento de la operación. Solo aplica cuando la moneda del aporte
-  // no coincide con la moneda del objetivo del bloque (caso ARS en AMERIAN / MARTIN BRONCE).
+  // MEP cargado en el momento de la operación. Obligatorio cuando la moneda del aporte no
+  // coincide con la moneda del objetivo único del bloque (ARS en AMERIAN / MARTIN BRONCE).
+  // Opcional en bloques DUAL (ON): si se carga, ese aporte se convierte y cuenta contra el
+  // objetivo de la otra moneda (ARS→USD o USD→ARS) en vez del objetivo de su propia moneda.
   cotizacion_mep_operacion: number | null
+  // Identificador propio de la operación (numeración interna del usuario, no la PK).
+  id_operacion: string | null
+  tipo_operacion: TipoOperacion
+  canal: Canal | null
   nota: string | null
   created_at: string
   updated_at: string

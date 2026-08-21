@@ -1,9 +1,12 @@
 import { useState } from 'react'
 import { useData } from '../context/DataContext'
 import { useToast } from '../context/ToastContext'
-import { Field, Input, PrimaryButton, Select } from '../components/Form'
+import { Field, PrimaryButton, Select } from '../components/Form'
+import { NumeroInput } from '../components/NumeroInput'
 import { SkeletonTableRows } from '../components/Skeleton'
 import { mesNombre } from '../utils/format'
+import { mensajeDeError } from '../utils/errors'
+import { crudoANumero } from '../utils/numero'
 
 const currentYear = new Date().getFullYear()
 
@@ -16,14 +19,15 @@ export function Cotizaciones() {
   const [saving, setSaving] = useState(false)
 
   const guardar = async () => {
-    if (!valor) return
+    const monto = crudoANumero(valor)
+    if (!monto || monto <= 0) return
     setSaving(true)
     try {
-      await upsertCotizacion({ anio, mes, valor_mep: Number(valor) })
+      await upsertCotizacion({ anio, mes, valor_mep: monto })
       setValor('')
       toast.success('Cotización guardada')
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'No se pudo guardar la cotización')
+      toast.error(mensajeDeError(e, 'No se pudo guardar la cotización'))
     } finally {
       setSaving(false)
     }
@@ -62,14 +66,7 @@ export function Cotizaciones() {
             </Select>
           </Field>
           <Field label="Cotización MEP">
-            <Input
-              type="number"
-              step="0.01"
-              min="0"
-              value={valor}
-              onChange={(e) => setValor(e.target.value)}
-              placeholder="Ej: 1520.50"
-            />
+            <NumeroInput value={valor} onChange={setValor} placeholder="Ej: 1.520,50" />
           </Field>
           <div className="flex items-end">
             <PrimaryButton onClick={guardar} disabled={saving || !valor} className="w-full">

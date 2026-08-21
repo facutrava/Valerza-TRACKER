@@ -1,6 +1,17 @@
-import { useState } from 'react'
-import type { Aporte, Bloque, Moneda, TipoCliente } from '../types'
+import { useEffect, useState } from 'react'
+import type { Aporte, Bloque, Canal, Moneda, TipoCliente, TipoOperacion } from '../types'
 import { Field, Input, Select, PrimaryButton, GhostButton } from './Form'
+import { NumeroInput } from './NumeroInput'
+import { numeroACrudo } from '../utils/numero'
+
+const CANALES: { value: Canal; label: string }[] = [
+  { value: 'efectivo', label: 'Efectivo' },
+  { value: 'transferencia', label: 'Transferencia' },
+  { value: 'cheque', label: 'Cheque' },
+  { value: 'efectivo_transferencia', label: 'Efect/transf' },
+  { value: 'on_valerza', label: 'ON Valerza' },
+  { value: 'on_amerian', label: 'ON Amerian' },
+]
 
 export interface AporteFormValues {
   bloque_id: string
@@ -10,6 +21,9 @@ export interface AporteFormValues {
   monto: string
   tipo_cliente: TipoCliente
   cotizacion_mep_operacion: string
+  id_operacion: string
+  tipo_operacion: TipoOperacion
+  canal: Canal | ''
   nota: string
 }
 
@@ -19,9 +33,12 @@ function valoresIniciales(bloques: Bloque[], aporte?: Aporte): AporteFormValues 
     cliente_nombre: aporte?.cliente_nombre ?? '',
     fecha: aporte?.fecha ?? new Date().toISOString().slice(0, 10),
     moneda: aporte?.moneda ?? 'ARS',
-    monto: aporte ? String(aporte.monto) : '',
+    monto: aporte ? numeroACrudo(aporte.monto) : '',
     tipo_cliente: aporte?.tipo_cliente ?? 'existente',
-    cotizacion_mep_operacion: aporte?.cotizacion_mep_operacion ? String(aporte.cotizacion_mep_operacion) : '',
+    cotizacion_mep_operacion: aporte?.cotizacion_mep_operacion ? numeroACrudo(aporte.cotizacion_mep_operacion) : '',
+    id_operacion: aporte?.id_operacion ?? '',
+    tipo_operacion: aporte?.tipo_operacion ?? 'nueva',
+    canal: aporte?.canal ?? '',
     nota: aporte?.nota ?? '',
   }
 }
@@ -40,14 +57,29 @@ export function AporteForm({
   saving?: boolean
 }) {
   const [values, setValues] = useState<AporteFormValues>(valoresIniciales(bloques, aporte))
+  const [convertir, setConvertir] = useState(Boolean(aporte?.cotizacion_mep_operacion))
 
   const bloqueSeleccionado = bloques.find((b) => b.id === values.bloque_id)
-  // La cotización por operación solo aplica cuando el objetivo del bloque es único en USD
-  // (AMERIAN / MARTIN BRONCE) y el aporte viene en ARS.
-  const necesitaCotizacion = bloqueSeleccionado?.moneda_objetivo === 'USD' && values.moneda === 'ARS'
+  // Objetivo único en USD (AMERIAN / MARTIN BRONCE): la cotización es obligatoria para poder
+  // medir el cumplimiento, no hay otro destino posible para un aporte en pesos.
+  const cotizacionObligatoria = bloqueSeleccionado?.moneda_objetivo === 'USD' && values.moneda === 'ARS'
+  // ON tiene objetivo propio en ARS y en USD: un aporte cuenta por defecto contra el objetivo
+  // de su misma moneda. El checkbox "Dolarizar o pesificar" es la señal explícita para que,
+  // en su lugar, cuente contra el objetivo de la otra moneda (requiere cotización).
+  const puedeConvertir = bloqueSeleccionado?.moneda_objetivo === 'DUAL'
+  const mostrarCotizacion = cotizacionObligatoria || (puedeConvertir && convertir)
 
   const set = <K extends keyof AporteFormValues>(key: K, val: AporteFormValues[K]) =>
     setValues((v) => ({ ...v, [key]: val }))
+
+  useEffect(() => {
+    if (!mostrarCotizacion) set('cotizacion_mep_operacion', '')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mostrarCotizacion])
+
+  useEffect(() => {
+    if (!puedeConvertir) setConvertir(false)
+  }, [puedeConvertir])
 
   return (
     <form
@@ -71,8 +103,8 @@ export function AporteForm({
         <Field label="Cliente">
           <Input
             value={values.cliente_nombre}
-            onChange={(e) => set('cliente_nombre', e.target.value)}
-            placeholder="Nombre y apellido"
+            onChange={(e) => set('cliente_nombre', e.target.value.toUpperCase())}
+            placeholder="NOMBRE Y APELLIDO"
             required
           />
         </Field>
@@ -83,54 +115,96 @@ export function AporteForm({
 
       <div className="grid grid-cols-2 gap-4">
         <Field label="Moneda">
-          <Select value={values.moneda} onChange={(e) => set('moneda', e.target.value as Moneda)}>
+          <Select value={values.moneda} onChange={(e) => set('moneda', e.target.value as Moneda)} required>
             <option value="ARS">ARS — Pesos</option>
             <option value="USD">USD — Dólares</option>
           </Select>
         </Field>
         <Field label="Monto">
-          <Input
-            type="number"
-            step="0.01"
-            min="0"
+          <NumeroInput
             value={values.monto}
-            onChange={(e) => set('monto', e.target.value)}
-            placeholder="0.00"
+            onChange={(crudo) => set('monto', crudo)}
+            placeholder="0,00"
             required
           />
         </Field>
       </div>
 
-      {necesitaCotizacion && (
-        <Field label="Cotización MEP de la operación">
-          <Input
-            type="number"
-            step="0.01"
-            min="0"
-            value={values.cotizacion_mep_operacion}
-            onChange={(e) => set('cotizacion_mep_operacion', e.target.value)}
-            placeholder="Ej: 1505.00"
-            required
+      {puedeConvertir && (
+        <label className="flex items-center gap-2 text-sm font-medium text-ink-700 dark:text-ink-200">
+          <input
+            type="checkbox"
+            checked={convertir}
+            onChange={(e) => setConvertir(e.target.checked)}
+            className="h-4 w-4 rounded border-ink-300 accent-brand-600 dark:border-ink-600"
           />
-          <p className="mt-1 text-xs text-ink-400">
-            Este aporte es en pesos pero el objetivo de {bloqueSeleccionado?.nombre} es en dólares — se necesita
-            la cotización de esta operación puntual para medir el cumplimiento.
-          </p>
+          Dolarizar o pesificar este aporte
+        </label>
+      )}
+
+      {mostrarCotizacion && (
+        <Field label="Cotización para Dolarización o Pesificación">
+          <NumeroInput
+            value={values.cotizacion_mep_operacion}
+            onChange={(crudo) => set('cotizacion_mep_operacion', crudo)}
+            placeholder="Ej: 1.505,00"
+            required={cotizacionObligatoria || (puedeConvertir && convertir)}
+          />
         </Field>
       )}
 
-      <Field label="Tipo de cliente">
-        <Select value={values.tipo_cliente} onChange={(e) => set('tipo_cliente', e.target.value as TipoCliente)}>
-          <option value="existente">Existente</option>
-          <option value="nuevo">Nuevo</option>
-        </Select>
-      </Field>
+      <div className="grid grid-cols-2 gap-4">
+        <Field label="ID">
+          <Input
+            value={values.id_operacion}
+            onChange={(e) => set('id_operacion', e.target.value.replace(/\D/g, ''))}
+            placeholder="Ej: 00123"
+            inputMode="numeric"
+            required
+          />
+        </Field>
+        <Field label="Canal">
+          <Select value={values.canal} onChange={(e) => set('canal', e.target.value as Canal | '')} required>
+            <option value="" disabled>
+              Seleccioná un canal
+            </option>
+            {CANALES.map((c) => (
+              <option key={c.value} value={c.value}>
+                {c.label}
+              </option>
+            ))}
+          </Select>
+        </Field>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        <Field label="Tipo de operación">
+          <Select
+            value={values.tipo_operacion}
+            onChange={(e) => set('tipo_operacion', e.target.value as TipoOperacion)}
+            required
+          >
+            <option value="nueva">Nueva</option>
+            <option value="renovacion">Renovación</option>
+          </Select>
+        </Field>
+        <Field label="Tipo de cliente">
+          <Select
+            value={values.tipo_cliente}
+            onChange={(e) => set('tipo_cliente', e.target.value as TipoCliente)}
+            required
+          >
+            <option value="existente">Existente</option>
+            <option value="nuevo">Nuevo</option>
+          </Select>
+        </Field>
+      </div>
 
       <Field label="Nota (opcional)">
         <Input
           value={values.nota}
-          onChange={(e) => set('nota', e.target.value)}
-          placeholder="Canal, clase de instrumento, detalle adicional..."
+          onChange={(e) => set('nota', e.target.value.toUpperCase())}
+          placeholder="DETALLE ADICIONAL..."
         />
       </Field>
 

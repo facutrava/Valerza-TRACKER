@@ -44,9 +44,14 @@ create table if not exists aportes (
   moneda text not null check (moneda in ('ARS', 'USD')),
   monto numeric(18,2) not null check (monto > 0),
   tipo_cliente text not null check (tipo_cliente in ('nuevo', 'existente')),
-  -- Solo se completa cuando la moneda del aporte no coincide con la moneda
-  -- del objetivo del bloque (ARS en AMERIAN / MARTIN BRONCE). Se carga en el momento.
+  -- Obligatoria cuando la moneda del aporte no coincide con la del objetivo único del
+  -- bloque (ARS en AMERIAN / MARTIN BRONCE). Opcional en bloques DUAL (ON): si se carga, el
+  -- aporte cuenta contra el objetivo de la otra moneda (ARS→USD o USD→ARS).
   cotizacion_mep_operacion numeric(12,2),
+  -- Identificador propio de la operación (numeración interna del usuario, no la PK).
+  id_operacion text,
+  tipo_operacion text not null default 'nueva' check (tipo_operacion in ('nueva', 'renovacion')),
+  canal text check (canal in ('efectivo', 'transferencia', 'cheque', 'efectivo_transferencia', 'on_valerza', 'on_amerian')),
   nota text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()

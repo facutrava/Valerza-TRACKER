@@ -9,17 +9,15 @@ import { SkeletonTableRows } from '../components/Skeleton'
 import { AporteForm, type AporteFormValues } from '../components/AporteForm'
 import { MonedaBadge } from '../components/MonedaBadge'
 import { GhostButton, Input, PrimaryButton, Select } from '../components/Form'
-import { formatMoneda } from '../utils/format'
+import { formatMoneda, mesNombre } from '../utils/format'
 import { descargarCSV } from '../utils/csv'
+import { mensajeDeError } from '../utils/errors'
+import { crudoANumero } from '../utils/numero'
 import type { Aporte } from '../types'
 
-type CampoOrden = 'fecha' | 'cliente_nombre' | 'monto' | 'bloque' | 'tipo_cliente'
+type CampoOrden = 'fecha' | 'cliente_nombre' | 'monto' | 'bloque' | 'tipo_cliente' | 'id_operacion' | 'tipo_operacion'
 
 const PAGINA = 25
-
-function formatFechaHora(iso: string) {
-  return new Date(iso).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
-}
 
 export function Aportes() {
   const { bloques, aportes, crearAporte, actualizarAporte, eliminarAporte, loading } = useData()
@@ -32,10 +30,45 @@ export function Aportes() {
   const [filtroTexto, setFiltroTexto] = useState('')
   const [filtroDesde, setFiltroDesde] = useState('')
   const [filtroHasta, setFiltroHasta] = useState('')
+  const [filtroMes, setFiltroMes] = useState('')
   const [orden, setOrden] = useState<{ campo: CampoOrden; dir: 'asc' | 'desc' }>({ campo: 'fecha', dir: 'desc' })
   const [visibleCount, setVisibleCount] = useState(PAGINA)
 
   const nombreBloque = (id: string) => bloques.find((b) => b.id === id)?.nombre ?? '—'
+
+  const mesesDisponibles = useMemo(() => {
+    const set = new Set(aportes.map((a) => a.fecha.slice(0, 7)))
+    return Array.from(set)
+      .sort()
+      .reverse()
+      .map((ym) => {
+        const [anio, mes] = ym.split('-').map(Number)
+        return { valor: ym, label: `${mesNombre(mes)} ${anio}` }
+      })
+  }, [aportes])
+
+  const aplicarFiltroMes = (valor: string) => {
+    setFiltroMes(valor)
+    if (!valor) {
+      setFiltroDesde('')
+      setFiltroHasta('')
+      return
+    }
+    const [anio, mes] = valor.split('-').map(Number)
+    const ultimoDia = new Date(anio, mes, 0).getDate()
+    setFiltroDesde(`${valor}-01`)
+    setFiltroHasta(`${valor}-${String(ultimoDia).padStart(2, '0')}`)
+  }
+
+  const onCambiarDesde = (valor: string) => {
+    setFiltroDesde(valor)
+    setFiltroMes('')
+  }
+
+  const onCambiarHasta = (valor: string) => {
+    setFiltroHasta(valor)
+    setFiltroMes('')
+  }
 
   const aportesFiltrados = useMemo(() => {
     const texto = filtroTexto.trim().toLowerCase()
@@ -53,6 +86,7 @@ export function Aportes() {
     return [...aportesFiltrados].sort((a, b) => {
       if (orden.campo === 'monto') return (a.monto - b.monto) * signo
       if (orden.campo === 'bloque') return nombreBloque(a.bloque_id).localeCompare(nombreBloque(b.bloque_id)) * signo
+      if (orden.campo === 'id_operacion') return (a.id_operacion ?? '').localeCompare(b.id_operacion ?? '') * signo
       const va = a[orden.campo]
       const vb = b[orden.campo]
       return va < vb ? -signo : va > vb ? signo : 0
@@ -62,11 +96,11 @@ export function Aportes() {
 
   useEffect(() => {
     setVisibleCount(PAGINA)
-  }, [filtroBloque, filtroTexto, filtroDesde, filtroHasta, orden])
+  }, [filtroBloque, filtroTexto, filtroDesde, filtroHasta, filtroMes, orden])
 
   const aportesPaginados = aportesOrdenados.slice(0, visibleCount)
 
-  const CAMPOS_ASC_POR_DEFECTO: CampoOrden[] = ['cliente_nombre', 'bloque', 'tipo_cliente']
+  const CAMPOS_ASC_POR_DEFECTO: CampoOrden[] = ['cliente_nombre', 'bloque', 'tipo_cliente', 'id_operacion', 'tipo_operacion']
 
   const ordenarPor = (campo: CampoOrden) => {
     setOrden((o) =>
@@ -107,6 +141,24 @@ export function Aportes() {
   }
 
   const guardar = async (values: AporteFormValues) => {
+    const palabrasNombre = values.cliente_nombre.trim().split(/\s+/).filter(Boolean)
+    if (palabrasNombre.length < 2) {
+      toast.error('Ingresá nombre y apellido del cliente')
+      return
+    }
+    const monto = crudoANumero(values.monto)
+    if (!monto || monto <= 0) {
+      toast.error('Ingresá un monto válido')
+      return
+    }
+    if (!values.id_operacion.trim()) {
+      toast.error('Ingresá el ID de la operación')
+      return
+    }
+    if (!values.canal) {
+      toast.error('Seleccioná un canal')
+      return
+    }
     setSaving(true)
     try {
       const payload = {
@@ -114,11 +166,14 @@ export function Aportes() {
         cliente_nombre: values.cliente_nombre.trim(),
         fecha: values.fecha,
         moneda: values.moneda,
-        monto: Number(values.monto),
+        monto,
         tipo_cliente: values.tipo_cliente,
         cotizacion_mep_operacion: values.cotizacion_mep_operacion
-          ? Number(values.cotizacion_mep_operacion)
+          ? crudoANumero(values.cotizacion_mep_operacion)
           : null,
+        id_operacion: values.id_operacion.trim(),
+        tipo_operacion: values.tipo_operacion,
+        canal: values.canal,
         nota: values.nota.trim() || null,
       }
       if (editando) await actualizarAporte(editando.id, payload)
@@ -126,7 +181,7 @@ export function Aportes() {
       setModalOpen(false)
       toast.success(editando ? 'Aporte actualizado' : 'Aporte guardado')
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'No se pudo guardar el aporte')
+      toast.error(mensajeDeError(e, 'No se pudo guardar el aporte'))
     } finally {
       setSaving(false)
     }
@@ -143,7 +198,7 @@ export function Aportes() {
       await eliminarAporte(a.id)
       toast.success('Aporte eliminado')
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'No se pudo eliminar el aporte')
+      toast.error(mensajeDeError(e, 'No se pudo eliminar el aporte'))
     }
   }
 
@@ -165,38 +220,54 @@ export function Aportes() {
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
-        <Input
-          value={filtroTexto}
-          onChange={(e) => setFiltroTexto(e.target.value)}
-          placeholder="Buscar cliente..."
-          className="w-56"
-        />
-        <Select value={filtroBloque} onChange={(e) => setFiltroBloque(e.target.value)} className="w-56">
-          <option value="todos">Todos los bloques</option>
-          {bloques.map((b) => (
-            <option key={b.id} value={b.id}>
-              {b.nombre}
-            </option>
-          ))}
-        </Select>
-        <Input
-          type="date"
-          value={filtroDesde}
-          onChange={(e) => setFiltroDesde(e.target.value)}
-          className="w-40"
-          title="Desde"
-        />
-        <Input
-          type="date"
-          value={filtroHasta}
-          onChange={(e) => setFiltroHasta(e.target.value)}
-          className="w-40"
-          title="Hasta"
-        />
-        <span className="text-xs text-ink-400">{aportesFiltrados.length} aportes</span>
+        <div className="min-w-[180px] flex-1 sm:max-w-xs">
+          <Input
+            value={filtroTexto}
+            onChange={(e) => setFiltroTexto(e.target.value)}
+            placeholder="Buscar cliente..."
+          />
+        </div>
+        <div className="w-40 shrink-0">
+          <Select value={filtroBloque} onChange={(e) => setFiltroBloque(e.target.value)}>
+            <option value="todos">Todos los bloques</option>
+            {bloques.map((b) => (
+              <option key={b.id} value={b.id}>
+                {b.nombre}
+              </option>
+            ))}
+          </Select>
+        </div>
+        <div className="w-36 shrink-0">
+          <Select value={filtroMes} onChange={(e) => aplicarFiltroMes(e.target.value)}>
+            <option value="">Todos los meses</option>
+            {mesesDisponibles.map((m) => (
+              <option key={m.valor} value={m.valor}>
+                {m.label}
+              </option>
+            ))}
+          </Select>
+        </div>
+        <div className="flex shrink-0 items-center gap-1.5">
+          <div className="w-[9.5rem]">
+            <Input
+              type="date"
+              value={filtroDesde}
+              onChange={(e) => onCambiarDesde(e.target.value)}
+              title="Desde"
+            />
+          </div>
+          <span className="text-xs text-ink-300 dark:text-ink-600">–</span>
+          <div className="w-[9.5rem]">
+            <Input
+              type="date"
+              value={filtroHasta}
+              onChange={(e) => onCambiarHasta(e.target.value)}
+              title="Hasta"
+            />
+          </div>
+        </div>
+        <span className="ml-auto shrink-0 text-xs text-ink-400">{aportesFiltrados.length} aportes</span>
       </div>
-
-
 
       <div className="overflow-hidden rounded-xl border border-ink-100 bg-white shadow-card dark:border-ink-800 dark:bg-ink-900">
         <table className="w-full text-sm">
@@ -205,6 +276,11 @@ export function Aportes() {
               <th className="px-5 py-3">
                 <button onClick={() => ordenarPor('fecha')} className="flex items-center gap-1 hover:text-ink-700 dark:hover:text-ink-100">
                   Fecha <IconoOrden campo="fecha" />
+                </button>
+              </th>
+              <th className="px-5 py-3">
+                <button onClick={() => ordenarPor('id_operacion')} className="flex items-center gap-1 hover:text-ink-700 dark:hover:text-ink-100">
+                  ID <IconoOrden campo="id_operacion" />
                 </button>
               </th>
               <th className="px-5 py-3">
@@ -222,6 +298,11 @@ export function Aportes() {
                   Tipo <IconoOrden campo="tipo_cliente" />
                 </button>
               </th>
+              <th className="px-5 py-3">
+                <button onClick={() => ordenarPor('tipo_operacion')} className="flex items-center gap-1 hover:text-ink-700 dark:hover:text-ink-100">
+                  Operación <IconoOrden campo="tipo_operacion" />
+                </button>
+              </th>
               <th className="px-5 py-3 text-right">
                 <button onClick={() => ordenarPor('monto')} className="ml-auto flex items-center gap-1 hover:text-ink-700 dark:hover:text-ink-100">
                   Monto <IconoOrden campo="monto" />
@@ -231,16 +312,27 @@ export function Aportes() {
             </tr>
           </thead>
           <tbody>
-            {loading && <SkeletonTableRows cols={6} rows={5} />}
+            {loading && <SkeletonTableRows cols={8} rows={5} />}
             {!loading && aportesFiltrados.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-5 py-8 text-center text-ink-400">
+                <td colSpan={8} className="px-5 py-8 text-center text-ink-400">
                   Todavía no cargaste ningún aporte.
                 </td>
               </tr>
             )}
             <AnimatePresence initial={false}>
-              {aportesPaginados.map((a) => (
+              {aportesPaginados.map((a) => {
+                const monedaMostrada = a.cotizacion_mep_operacion
+                  ? a.moneda === 'ARS'
+                    ? 'USD'
+                    : 'ARS'
+                  : a.moneda
+                const montoMostrado = a.cotizacion_mep_operacion
+                  ? a.moneda === 'ARS'
+                    ? a.monto / a.cotizacion_mep_operacion
+                    : a.monto * a.cotizacion_mep_operacion
+                  : a.monto
+                return (
                 <motion.tr
                   key={a.id}
                   initial={{ opacity: 0 }}
@@ -250,16 +342,10 @@ export function Aportes() {
                   className="border-b border-ink-50 last:border-0 hover:bg-ink-50/50 dark:border-ink-800/60 dark:hover:bg-ink-800/30"
                 >
                 <td className="tabular px-5 py-3 text-ink-500">{a.fecha}</td>
+                <td className="tabular px-5 py-3 text-ink-500">{a.id_operacion || '—'}</td>
                 <td className="px-5 py-3 font-medium text-ink-900 dark:text-ink-50">
                   {a.cliente_nombre}
                   {a.nota && <div className="text-xs font-normal text-ink-400">{a.nota}</div>}
-                  <div
-                    className="text-[11px] font-normal text-ink-300 dark:text-ink-600"
-                    title={`Cargado: ${formatFechaHora(a.created_at)}${a.updated_at !== a.created_at ? ` · Editado: ${formatFechaHora(a.updated_at)}` : ''}`}
-                  >
-                    Cargado {formatFechaHora(a.created_at)}
-                    {a.updated_at !== a.created_at && ' · editado'}
-                  </div>
                 </td>
                 <td className="px-5 py-3 text-ink-500">{nombreBloque(a.bloque_id)}</td>
                 <td className="px-5 py-3">
@@ -273,11 +359,29 @@ export function Aportes() {
                     {a.tipo_cliente === 'nuevo' ? 'Nuevo' : 'Existente'}
                   </span>
                 </td>
-                <td className="tabular px-5 py-3 text-right font-semibold text-ink-900 dark:text-ink-50">
-                  <span className="mr-2 inline-block align-middle">
-                    <MonedaBadge moneda={a.moneda} />
+                <td className="px-5 py-3">
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                      a.tipo_operacion === 'renovacion'
+                        ? 'bg-gold-100 text-gold-800 dark:bg-gold-800/25 dark:text-gold-100'
+                        : 'bg-ink-100 text-ink-500 dark:bg-ink-800 dark:text-ink-300'
+                    }`}
+                  >
+                    {a.tipo_operacion === 'renovacion' ? 'Renovación' : 'Nueva'}
                   </span>
-                  {formatMoneda(a.monto, a.moneda).replace(/^(ARS|U\$S)\s?/, '')}
+                </td>
+                <td className="tabular px-5 py-3 text-right font-semibold text-ink-900 dark:text-ink-50">
+                  <span
+                    className="inline-flex items-center justify-end gap-2 whitespace-nowrap"
+                    title={
+                      a.cotizacion_mep_operacion
+                        ? `Convertido de ${formatMoneda(a.monto, a.moneda)} con cotización ${a.cotizacion_mep_operacion}`
+                        : undefined
+                    }
+                  >
+                    <MonedaBadge moneda={monedaMostrada} />
+                    {formatMoneda(montoMostrado, monedaMostrada).replace(/^(ARS|U\$S)\s?/, '')}
+                  </span>
                 </td>
                 <td className="px-5 py-3">
                   <div className="flex justify-end gap-1">
@@ -296,7 +400,8 @@ export function Aportes() {
                   </div>
                 </td>
                 </motion.tr>
-              ))}
+                )
+              })}
             </AnimatePresence>
           </tbody>
         </table>

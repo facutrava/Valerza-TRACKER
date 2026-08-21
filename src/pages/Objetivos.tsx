@@ -4,7 +4,10 @@ import { useData } from '../context/DataContext'
 import { useToast } from '../context/ToastContext'
 import { periodosDelAnio } from '../utils/calculations'
 import { formatMoneda, labelForPeriodo } from '../utils/format'
+import { mensajeDeError } from '../utils/errors'
+import { crudoANumero, numeroACrudo } from '../utils/numero'
 import { MonedaBadge } from '../components/MonedaBadge'
+import { NumeroInput } from '../components/NumeroInput'
 import { Skeleton } from '../components/Skeleton'
 
 const currentYear = new Date().getFullYear()
@@ -24,19 +27,20 @@ function FilaObjetivo({
 }) {
   const { upsertObjetivo } = useData()
   const toast = useToast()
-  const [valor, setValor] = useState(montoActual !== null ? String(montoActual) : '')
+  const [valor, setValor] = useState(montoActual !== null ? numeroACrudo(montoActual) : '')
   const [dirty, setDirty] = useState(false)
   const [saving, setSaving] = useState(false)
 
   const guardar = async () => {
-    if (!valor) return
+    const monto = crudoANumero(valor)
+    if (!monto || monto <= 0) return
     setSaving(true)
     try {
-      await upsertObjetivo({ bloque_id: bloqueId, periodo_key: periodoKey, anio, moneda, monto: Number(valor) })
+      await upsertObjetivo({ bloque_id: bloqueId, periodo_key: periodoKey, anio, moneda, monto })
       setDirty(false)
       toast.success('Objetivo actualizado')
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'No se pudo guardar el objetivo')
+      toast.error(mensajeDeError(e, 'No se pudo guardar el objetivo'))
     } finally {
       setSaving(false)
     }
@@ -50,16 +54,14 @@ function FilaObjetivo({
       </td>
       <td className="px-5 py-2.5">
         <div className="flex items-center gap-2">
-          <input
-            type="number"
-            step="0.01"
+          <NumeroInput
             value={valor}
-            onChange={(e) => {
-              setValor(e.target.value)
+            onChange={(crudo) => {
+              setValor(crudo)
               setDirty(true)
             }}
             placeholder="Sin definir"
-            className="tabular w-40 rounded-lg border border-ink-200 bg-white px-2.5 py-1.5 text-sm text-ink-900 outline-none focus:border-brand-600 focus:ring-2 focus:ring-brand-600/15 dark:border-ink-700 dark:bg-ink-800 dark:text-ink-50"
+            className="tabular w-40 px-2.5 py-1.5"
           />
           {dirty && (
             <button
